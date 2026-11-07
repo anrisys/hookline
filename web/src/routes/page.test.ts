@@ -24,9 +24,7 @@ describe('home page load', () => {
 	});
 
 	it('uses the event fetch, with the bearer token, against /healthz', async () => {
-		const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
-			Response.json({ status: 'ok' })
-		);
+		const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ status: 'ok' }));
 		await runLoad(fetch);
 		const [url, init] = fetch.mock.calls[0];
 		expect(String(url)).toBe('http://api:8080/healthz');
