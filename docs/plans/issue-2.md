@@ -25,6 +25,19 @@ Design:
 - **`apiFetch(fetch, path, init)`** prefixes `API_URL`, adds `Authorization: Bearer` when `API_KEY` is set, and aborts after 2s (longer than the API's 1s ping timeout, so a 503 is seen as a 503).
 - **Never prerendered;** the load runs on every request, so a reload shows the current state.
 
+## Implementation notes (2026-11-07)
+- **Versions (pinned exactly):** `@sveltejs/kit` 3.1.1, `@sveltejs/adapter-node` 6.0.1, svelte 5.57.3, vite 8.3.6, typescript 6.0.3, vitest 4.1.12. Scaffolded with `sv` 1.3.0. The toolchain gate passed, so no fallback to Kit 2 was needed.
+- **The build validates env too.** `vite build` starts the server once (`building: true`) to analyse routes, and that runs the `src/env.ts` schemas. Without a workaround, building needs `API_URL`. `API_URL`'s schema skips the check while `building` (and returns `''` so the type stays `string`). Verified: the build passes with no `API_URL` and no `web/.env`. `node build` exits 1 with no `API_URL` or with `localhost:8080` (no scheme), and runs with a valid one. #3's Dockerfile needs no build-time `API_URL`.
+- **`localhost:8080` without `http://` parses as scheme `localhost:`**, so the error is "must use http or https". There's a test for it.
+- **Layout:** `src/lib/server/api.ts` holds pure `createApiFetch(cfg)`. `src/lib/server/client.ts` is the only module that reads `$app/env/private`. Tests use the factory directly or mock `client.ts`, so they never need env.
+- **The body read is covered by the timeout too** (test with a stalled stream).
+- **The `build/client` key grep proves little.** The key is runtime-only, so it can never be in the build. The useful check is that the served HTML doesn't contain the key (verified: 0 matches). The server-only directory guard is what stops a future import leak.
+- **Manual checks done:** API up → "API: ok". SIGTERM to the API → "API: down". DB stopped → "API: down" (API 503). DB back → "API: ok". The same build run with `API_URL=:9999` → "API: down".
+- **Go side:** a package inside `web/node_modules` (`flatted` ships a `.go` file) was matched by `go ./...`. `go.mod` now has `ignore ./web/node_modules`.
+- **`npm audit`:** 14 low/moderate, all transitive dev-tool deps (`deepmerge` via kit, `minimatch` via eslint). npm's suggested fixes are downgrades (kit 0.0.30, eslint 9), so not applied. Re-check when upstream bumps.
+- The root `.gitignore` is unchanged because `web/.gitignore` already covers `node_modules`, `build`, `.svelte-kit` and `.env`.
+- **Extra commits beyond E:** `test(web): type the fetch mock…` (an eslint fix found late) and `chore: exclude web/node_modules from Go package patterns`.
+
 ## C. Ownership
 All **AI scaffolds** (config, wiring, a trivial status mapping). Nothing here is schema, claim, retry, signing, idempotency or tracing (traceparent forwarding is #20).
 
@@ -60,7 +73,7 @@ make db-up && make run-api &                                         # API on :8
 curl -s localhost:3000 | grep -o 'API: [a-z]*'      # API: ok
 kill %1                                             # stop the API
 curl -s localhost:3000 | grep -o 'API: [a-z]*'      # API: down
-grep -r devkey web/build/client || echo "key not in client bundle"
+curl -s localhost:3000 | grep -c devkey            # 0: key not in served HTML
 (cd web && API_URL=http://localhost:9999 PORT=3001 node build &)     # same build, other URL → down
 (cd web && env -u API_URL node build); echo "exit=$?"                # non-zero
 ```
