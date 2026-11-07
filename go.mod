@@ -2,6 +2,9 @@ module github.com/anrisys/hookline
 
 go 1.27.0
 
+// npm packages can ship .go files; keep them out of ./...
+ignore ./web/node_modules
+
 require (
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/pressly/goose/v3 v3.29.0
