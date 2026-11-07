@@ -9,7 +9,8 @@ GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v
 PG_CONTAINER  ?= hookline-pg
 PG_IMAGE      ?= postgres:17
 
-.PHONY: help fmt fmt-check vet lint test build run-api run-worker run-chaos db-up db-down db-psql
+.PHONY: help fmt fmt-check vet lint test build run-api run-worker run-chaos db-up db-down db-psql \
+	web-install web-dev web-check web-lint web-test web-build web-run
 
 help:
 	@grep -E '^[a-z-]+:' Makefile | cut -d: -f1
@@ -54,3 +55,29 @@ db-down:
 # Usage: make db-psql Q='select 1'
 db-psql:
 	docker exec $(PG_CONTAINER) psql -U hookline -d hookline -c "$(Q)"
+
+# --- web (SvelteKit, in web/) ---
+# web-dev reads web/.env (copy web/.env.example). web-run needs API_URL in the
+# environment, e.g. make web-run API_URL=http://localhost:8080
+WEB_NPM := npm --prefix web
+
+web-install:
+	$(WEB_NPM) ci
+
+web-dev:
+	$(WEB_NPM) run dev
+
+web-check:
+	$(WEB_NPM) run check
+
+web-lint:
+	$(WEB_NPM) run lint
+
+web-test:
+	$(WEB_NPM) test
+
+web-build:
+	$(WEB_NPM) run build
+
+web-run: web-build
+	node web/build
