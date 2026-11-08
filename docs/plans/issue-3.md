@@ -28,6 +28,24 @@ Design:
 - Compose reads the root `.env` for `${VAR}` interpolation only. Its `DATABASE_URL` points at localhost, so the compose file sets container URLs explicitly and never interpolates `${DATABASE_URL}`.
 - `.dockerignore` keeps `.git`, `bin/`, `.env`, `web/.env`, `node_modules`, build output out of contexts.
 
+## Implementation notes (2026-11-08)
+- **Measured:** `hookline:local` is 23.2MB, user `nonroot:nonroot`. `hookline-web:local` is 333MB, almost all of it the `node:24-slim` base (uncompressed); the app layer is `build/` + `package.json`. A cold `make up` reaches all-healthy in about 14s.
+- **The web runtime really needs nothing but `build/`.** Checked by running `node build` from a copy with no `node_modules` and no `src/`. The `#lib`/`#server` hits seen when grepping the build output are JSDoc `@import` comments, not real imports.
+- **Healthcheck:** exit 0 only on 200. Redirects aren't followed. 2s timeout, longer than the API's 1s DB ping, so an outage shows as a 503 and not as a client timeout. It runs before `config.Load`, so it needs no env.
+- **Unhealthy doesn't mean restarted.** Plain Docker (outside Swarm) doesn't restart unhealthy containers. With Postgres stopped, api and worker show `unhealthy`, web stays healthy and shows "API: down", and all of them recover when Postgres is back. That's the behaviour we want.
+- **Shutdown:** `docker compose stop` takes about 1.4s; every container exits 0, and api, worker and chaos log "stopped".
+- **Restart:** `down` + `up` keeps `pgdata`; goose applies nothing new.
+- **`hookline:local` builds three times** (api, worker and chaos share one YAML anchor). All three are cache hits on one tag, so it costs almost nothing. Giving `build:` to api alone would mean relying on Compose's ordering for worker and chaos on a fresh machine.
+- **Choices beyond the plan:**
+  - Every host port binds to `127.0.0.1` (dev credentials).
+  - web gets `ORIGIN=http://localhost:3000` now, because adapter-node's form-action origin check needs it in S1.
+  - chaos gets an explicit empty `DATABASE_URL`.
+  - `start_interval: 1s` speeds up the first healthy result.
+  - The root `compose.yaml` sets `name: hookline`.
+- **YAML gotcha:** the web healthcheck's JS contains ` ? 0 : 1`, and the `: ` made YAML parse it as a mapping, so the string is quoted.
+- **The Makefile exports `.env`** into recipes, so `make up` passes `DATABASE_URL=localhost…` into Compose's environment. That's harmless because the compose file never interpolates it.
+- **Verified:** `make fmt-check vet lint test`, `make web-check web-lint web-test`, `make smoke`, plus the failure, shutdown and restart checks in F.
+
 ## C. Ownership
 All **AI scaffolds** (Docker, compose, health plumbing and tests). The user reviews.
 
