@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Read-only token: CI checks code, it never writes to the repo or a registry.
+permissions:
+  contents: read
+
+# A new push to the same PR or branch cancels the run it replaces.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# No path filters on purpose: a skipped job reports success, so a required
+# check could pass without running.
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: hookline
+          POSTGRES_PASSWORD: hookline
+          POSTGRES_DB: hookline
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hookline"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      # storetest creates and drops one database per test on this server. It
+      # fails (not skips) when this is unset, because Actions sets CI=true.
+      TEST_DATABASE_URL: postgres://hookline:hookline@localhost:5432/hookline?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: make fmt-check vet
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          # Keep in sync with GOLANGCI_LINT in the Makefile.
+          version: v2.14.0
+      - run: make test
