@@ -63,3 +63,29 @@ jobs:
           cache-dependency-path: web/package-lock.json
       # web-lint runs prettier --check and eslint; web-check runs svelte-check.
       - run: make web-install web-check web-lint web-test
+
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      # Buildx gives BuildKit (the Dockerfiles use cache mounts) and the GHA
+      # layer cache. Each image gets its own cache scope so they don't evict
+      # each other.
+      - uses: docker/setup-buildx-action@v4
+      - name: Build Go image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          tags: hookline:ci
+          push: false
+          cache-from: type=gha,scope=hookline
+          cache-to: type=gha,scope=hookline,mode=max
+      - name: Build web image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./web
+          tags: hookline-web:ci
+          push: false
+          cache-from: type=gha,scope=hookline-web
+          cache-to: type=gha,scope=hookline-web,mode=max
