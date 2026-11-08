@@ -13,6 +13,19 @@ Sources: `requirements.md` (Scope, N5), `backlog.md` (S0 done-when: "CI is green
 
 One session.
 
+## Implementation notes (2026-11-08)
+- **AC4:** PR #31's first run ([42484057542](https://github.com/anrisys/hookline/actions/runs/42484057542)) went green: `go` 1m16s, `web` 57s, `images` 2m9s. All seven Go packages show `ok`, including the Postgres-backed `store`, `api`, `worker` and `cmd/hookline`.
+- **AC5:** a temporary commit (unchecked `os.Remove` in Go, unused `const` in `web/src`) made run [42484527141](https://github.com/anrisys/hookline/actions/runs/42484527141) red. `go` failed on errcheck and `web` on `@typescript-eslint/no-unused-vars`; `images` stayed green, as expected. The commit was dropped with `--force-with-lease`, and run [42484669394](https://github.com/anrisys/hookline/actions/runs/42484669394) went green again.
+- **Caching works:** with a warm module/build cache, the `go` job dropped from 1m16s to 34s and `web` from 57s to 26s.
+- **Lint runs before the tests** in the `go` job, so a lint failure stops the job early, before the test suite starts.
+- **CI guard checked locally:** `CI=true` with no `TEST_DATABASE_URL` makes `internal/store` fail with "TEST_DATABASE_URL must be set in CI". The guard only works because Actions sets `CI=true`.
+- **Action versions:** checkout v7, setup-go v7, setup-node v7, golangci-lint-action v9, setup-buildx v4, build-push v7. All were the latest releases and at least a month old.
+- **Choices beyond the plan:**
+  - `setup-go` caches by default since v6, so the workflow has no `cache:` key for it.
+  - `prettier --check` runs inside `web/` only, so it doesn't check the workflow YAML; actionlint does that.
+- **Follow-ups:** the user enables branch protection requiring `go`, `web` and `images` (D4); `make smoke` in CI is deferred (D3).
+- **Verified:** actionlint clean, `make fmt-check vet lint test` with `CI=true` against Postgres, `make web-check web-lint web-test`, both `docker buildx build`s, PR #31 green.
+
 ## B. Plan
 | Area | Change |
 |---|---|
