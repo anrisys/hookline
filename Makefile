@@ -10,7 +10,7 @@ PG_CONTAINER  ?= hookline-pg
 PG_IMAGE      ?= postgres:17
 
 .PHONY: help fmt fmt-check vet lint test build run-api run-worker run-chaos db-up db-down db-psql \
-	web-install web-dev web-check web-lint web-test web-build web-run
+	web-install web-dev web-check web-lint web-test web-build web-run up down smoke
 
 help:
 	@grep -E '^[a-z-]+:' Makefile | cut -d: -f1
@@ -81,3 +81,20 @@ web-build:
 
 web-run: web-build
 	node web/build
+
+# --- docker compose stack (compose.yaml -> deploy/docker-compose.yml) ---
+# up returns once every service is healthy, or fails if one never gets there.
+# Free port 5432 first if hookline-pg is running (make db-down), or set
+# POSTGRES_PORT.
+up:
+	docker compose up -d --build --wait
+
+# Keeps the pgdata volume; add `-v` by hand to wipe the database.
+down:
+	docker compose down
+
+# Stack-level check: all services healthy and the dashboard reaches the API.
+smoke: up
+	@curl -fsS http://localhost:3000/ | grep -q 'API: ok' \
+		&& echo "smoke: dashboard shows API: ok" \
+		|| { echo "smoke: dashboard does not show API: ok"; docker compose ps; exit 1; }

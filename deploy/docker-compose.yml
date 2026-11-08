@@ -1,0 +1,110 @@
+# Local stack: `docker compose up` from the repo root (compose.yaml includes
+# this file). Paths here are relative to deploy/.
+#
+# Compose reads the root .env only to fill ${VAR} below. That file's
+# DATABASE_URL points at localhost for host-side runs, so it is deliberately
+# never interpolated; containers get their own URLs here.
+#
+# Ports bind to 127.0.0.1: this is a dev stack with dev credentials.
+
+x-hookline: &hookline
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  image: hookline:local
+  restart: unless-stopped
+  environment: &hookline-env
+    DATABASE_URL: postgres://hookline:hookline@postgres:5432/hookline?sslmode=disable
+    SHUTDOWN_TIMEOUT: 30s
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+  # Docker sends SIGKILL 10s after SIGTERM by default, which would cut
+  # through SHUTDOWN_TIMEOUT. Leave headroom above 30s.
+  stop_grace_period: 40s
+
+# Shared probe timing. start_interval polls quickly while a service boots,
+# then interval takes over once it is healthy.
+x-probe: &probe
+  interval: 10s
+  timeout: 3s
+  retries: 3
+  start_period: 30s
+  start_interval: 1s
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hookline
+      POSTGRES_PASSWORD: hookline
+      POSTGRES_DB: hookline
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      <<: *probe
+      test: ["CMD", "pg_isready", "-U", "hookline", "-d", "hookline"]
+
+  # Runs migrations at startup (under an advisory lock), so the worker waits
+  # for it to be healthy before it starts.
+  api:
+    <<: *hookline
+    command: ["api"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      <<: *probe
+      test: ["CMD", "/hookline", "healthcheck", "http://127.0.0.1:8080/healthz"]
+
+  worker:
+    <<: *hookline
+    command: ["worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      <<: *probe
+      test: ["CMD", "/hookline", "healthcheck", "http://127.0.0.1:8081/healthz"]
+
+  chaos:
+    <<: *hookline
+    command: ["chaos"]
+    environment:
+      <<: *hookline-env
+      DATABASE_URL: ""
+    ports:
+      - "127.0.0.1:8090:8090"
+    healthcheck:
+      <<: *probe
+      test: ["CMD", "/hookline", "healthcheck", "http://127.0.0.1:8090/healthz"]
+
+  web:
+    build:
+      context: ../web
+    image: hookline-web:local
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:8080
+      # adapter-node checks form-action requests against ORIGIN.
+      ORIGIN: http://localhost:3000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      <<: *probe
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/healthz').then(r => process.exit(r.status === 200 ? 0 : 1), () => process.exit(1))"
+
+volumes:
+  pgdata:

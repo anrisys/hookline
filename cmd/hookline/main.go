@@ -17,7 +17,7 @@ import (
 	"github.com/anrisys/hookline/internal/worker"
 )
 
-const usage = "usage: hookline <api|worker|chaos>"
+const usage = "usage: hookline <api|worker|chaos>\n       hookline healthcheck <url>"
 
 type runFunc func(context.Context, config.Config, *slog.Logger) error
 
@@ -34,6 +34,9 @@ func main() {
 // run returns the process exit code: 0 on clean shutdown, 1 on failure, 2 on
 // bad usage.
 func run(args []string, getenv func(string) string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "healthcheck" {
+		return healthcheck(args[1:], stderr, healthcheckTimeout)
+	}
 	if len(args) != 1 {
 		fmt.Fprintln(stderr, usage)
 		return 2

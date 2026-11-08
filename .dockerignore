@@ -1,0 +1,11 @@
+# Context for the Go image. The Dockerfile copies only go.mod, go.sum, cmd/
+# and internal/; this keeps the upload small and secrets out of the context.
+.git
+.env
+.env.*
+bin/
+web/
+docs/
+deploy/
+*.test
+coverage.out

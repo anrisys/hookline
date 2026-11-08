@@ -1,0 +1,6 @@
+# Lets `docker compose up` work from the repo root. The stack lives in
+# deploy/ next to the observability config that S7/S8 add.
+name: hookline
+
+include:
+  - deploy/docker-compose.yml
