@@ -5,6 +5,7 @@ include .env
 export
 endif
 
+# Keep the version in sync with golangci-lint-action in .github/workflows/ci.yml.
 GOLANGCI_LINT ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 PG_CONTAINER  ?= hookline-pg
 PG_IMAGE      ?= postgres:17
