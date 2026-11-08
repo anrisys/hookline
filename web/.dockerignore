@@ -1,0 +1,11 @@
+# Build output and deps are recreated inside the image; .env holds local
+# secrets (API_KEY) and must never enter the build context.
+node_modules
+build
+.svelte-kit
+.env
+.env.*
+!.env.example
+.vscode
+Dockerfile
+.dockerignore
