@@ -50,3 +50,16 @@ jobs:
           # Keep in sync with GOLANGCI_LINT in the Makefile.
           version: v2.14.0
       - run: make test
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # web-lint runs prettier --check and eslint; web-check runs svelte-check.
+      - run: make web-install web-check web-lint web-test
